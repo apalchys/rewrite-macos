@@ -2,6 +2,9 @@
 
 A macOS application that runs in the background and fixes grammar errors in selected text using OpenAI's API.
 
+<img width="234" alt="image" src="https://github.com/user-attachments/assets/621e8498-a324-4397-ba46-504dd5dbe2f0" />
+
+
 ## Features
 
 - Runs as a background application with menu bar icon
