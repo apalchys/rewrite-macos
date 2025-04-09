@@ -4,8 +4,12 @@ import Foundation
 import HotKey
 import AppKit
 
+// System prompt constant for grammar correction
+let GRAMMAR_CORRECTION_PROMPT = "You are a grammar correction assistant. Correct any grammatical errors in the text and rewrite it clearly and fluently without changing the original meaning or adding commentary. Return only the corrected text, without explanations."
+
 // Extension to load images from bundle
 extension Bundle {
+    // Helper method to decode images from the bundle with proper error handling
     func decodedImage(named name: String) -> Image? {
         if let path = Bundle.main.path(forResource: name, ofType: "png"),
            let nsImage = NSImage(contentsOfFile: path) {
@@ -127,6 +131,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         return UserDefaults.standard.string(forKey: "openAIApiKey") ?? ""
     }
     
+    // Status enum with associated icon images for menu bar states
     enum APIStatus {
         case ok
         case error
@@ -163,7 +168,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
             object: nil
         )
         
-        // Check API status on launch
+        // Check API status on launch with a small delay to ensure UI is ready
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
             self?.checkAPIStatus()
         }
@@ -232,6 +237,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         }
         
         // Make a simple API call to check if the OpenAI API is working
+        // This performs a lightweight request to the models endpoint to validate API key
         let apiURL = URL(string: "https://api.openai.com/v1/models")!
         var request = URLRequest(url: apiURL)
         request.httpMethod = "GET"
@@ -271,7 +277,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
     }
     
     private func setupHotKey() {
-        // Set up Command+Shift+F hotkey
+        // Set up Command+Shift+F hotkey using HotKey library
+        // This registers a system-wide keyboard shortcut
         hotKey = HotKey(key: .f, modifiers: [.command, .shift])
         
         hotKey?.keyDownHandler = { [weak self] in
@@ -315,10 +322,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
     }
     
     private func getSelectedText() -> String? {
-        // Get current pasteboard content
+        // This method uses pasteboard and keyboard shortcuts to get selected text from any app
+        // We need to save the current pasteboard content to restore it later
         let oldPasteboardContent = NSPasteboard.general.string(forType: .string)
         
-        // Simulate Command+C to copy selected text
+        // Simulate Command+C to copy selected text using CGEvent (Core Graphics)
+        // Virtual key 0x08 corresponds to 'c' on the keyboard
         let source = CGEventSource(stateID: .hidSystemState)
         
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x08, keyDown: true)
@@ -327,6 +336,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         keyDown?.flags = .maskCommand
         keyUp?.flags = .maskCommand
         
+        // Post these events to the system to simulate keyboard press
         keyDown?.post(tap: .cghidEventTap)
         keyUp?.post(tap: .cghidEventTap)
         
@@ -346,7 +356,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
     }
     
     private func replaceSelectedText(with newText: String) {
-        // Save current pasteboard content
+        // Save current pasteboard content to restore it after operation
         let oldPasteboardContent = NSPasteboard.general.string(forType: .string)
         
         // Set the corrected text to pasteboard
@@ -354,6 +364,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         NSPasteboard.general.setString(newText, forType: .string)
         
         // Simulate Command+V to paste corrected text
+        // Virtual key 0x09 corresponds to 'v' on the keyboard
         let source = CGEventSource(stateID: .hidSystemState)
         
         let keyDown = CGEvent(keyboardEventSource: source, virtualKey: 0x09, keyDown: true)
@@ -366,6 +377,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         keyUp?.post(tap: .cghidEventTap)
         
         // Restore original pasteboard content after a delay
+        // Delay ensures paste operation completes before restoring clipboard
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
             if let oldContent = oldPasteboardContent {
                 NSPasteboard.general.clearContents()
@@ -385,6 +397,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
             apiStatus = .error
             updateStatusItemIcon()
             updateAPIStatusMenuItem()
+            // Open preferences window to prompt user to enter API key
             NSApp.sendAction(Selector(("showPreferencesWindow:")), to: nil, from: nil)
             completion(nil)
             return
@@ -395,19 +408,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         updateStatusItemIcon()
         updateAPIStatusMenuItem()
         
+        // Prepare API request to OpenAI Chat Completions endpoint
         let apiURL = URL(string: "https://api.openai.com/v1/chat/completions")!
         var request = URLRequest(url: apiURL)
         request.httpMethod = "POST"
         request.addValue("Bearer \(openAIApiKey)", forHTTPHeaderField: "Authorization")
         request.addValue("application/json", forHTTPHeaderField: "Content-Type")
         
+        // Build request payload with system prompt and user text
         let requestBody: [String: Any] = [
             "model": currentModel,
             "messages": [
-                ["role": "system", "content": "You are a grammar correction assistant. Fix any grammatical errors in the text provided without changing the meaning or adding additional commentary. Return only the corrected text with no explanations."],
+                ["role": "system", "content": GRAMMAR_CORRECTION_PROMPT],
                 ["role": "user", "content": text]
             ],
-            "temperature": 0.3
+            "temperature": 0.3  // Lower temperature for more consistent grammar corrections
         ]
         
         guard let httpBody = try? JSONSerialization.data(withJSONObject: requestBody) else {
@@ -420,6 +435,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
         
         request.httpBody = httpBody
         
+        // Execute API request
         URLSession.shared.dataTask(with: request) { [weak self] data, response, error in
             DispatchQueue.main.async {
                 if let error = error {
@@ -448,6 +464,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
                     return
                 }
                 
+                // Parse response to extract corrected text from OpenAI API
                 do {
                     if let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                        let choices = json["choices"] as? [[String: Any]],
@@ -528,7 +545,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, Observable
             backing: .buffered,
             defer: false
         )
-        // These are crucial - prevent window from terminating app when closed
+        // These window properties are crucial for proper behavior as a preference window
+        // isReleasedWhenClosed = false prevents the window from being deallocated when closed
         settingsWindow.isReleasedWhenClosed = false
         // Set the window to be non-main to prevent it from becoming the main window
         // which would cause app termination when closed
